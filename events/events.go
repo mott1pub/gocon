@@ -55,10 +55,14 @@ func (e *Events) AddEvent(ae *Event) {
 	e.myevents[ae.id] = *ae
 }
 
+// GetEvent retrieves an event from the Events struct by its ID.
+// It returns the event if found, or a zero-value Event if not found.
 func (e *Events) GetEvent(id int) Event {
 	return e.myevents[id]
 }
 
+// RemoveEvent removes an event from the Events struct by its ID.
+// It returns true if the event was successfully removed, or false if the event was not found.
 func (e *Events) RemoveEvent(eventID int) bool {
 
 	if _, exists := e.myevents[eventID]; exists {

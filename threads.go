@@ -22,6 +22,7 @@ type ThreadPool struct {
 	//ventsThreads *ants.Pool
 	persistanceThreads *ants.Pool
 	persistanceChannel chan *events.Event
+	quit               chan bool
 }
 
 func setPoolSize(size int) {
@@ -59,7 +60,7 @@ func getAddPool() *ants.Pool {
 }
 
 func getAddChannel() chan *events.Event {
-	fmt.Printf("display Thread %p\n", &threadPool)
+	fmt.Printf("display Thread Pool %p\n", &threadPool)
 	return threadPool.addChannel
 }
 
@@ -167,7 +168,8 @@ func releasePool(p *ants.Pool) {
 func submitAddEventstoWorkerPool() {
 	for i := 0; i < getPoolSize(); i++ {
 		// Submit a task closure that invokes AddEvent with the channel
-		threadPool.addThreads.Submit(func() { AddEvent(threadPool.addChannel) })
+		threadPool.addThreads.Submit(func() { AddEvent(i, threadPool.addChannel) })
+		fmt.Printf("Submitted Thread AddEvent to worker pool %d\n", i)
 	}
 }
 
@@ -175,31 +177,50 @@ func submitAddEventstoWorkerPool() {
 //     a. call preAddEvents
 //     b. add event to storage
 //     c. call postAddEvents
-func AddEvent(channel chan *events.Event) {
+func AddEvent(id int, channel chan *events.Event) {
 
-	addEvent := <-channel
+	for {
+		select {
+		case addEvent := <-channel:
 
-	status := preEvent(addEvent)
+			fmt.Printf("Adding Event %d: %s\n", addEvent.GetId(), addEvent.GetMessage())
 
-	// if preEvent is not successful, log and return
-	//  1. log pre event failure can happen with the following:
-	//   a. event validation failure
-	//   b. event already exists
-	//   c. system is not ready to accept new events (Already lockeced by another process)
-	if !status {
-		fmt.Println("item for :", addEvent.GetMessage())
-		return
+			status := preEvent(addEvent)
+
+			// if preEvent is not successful, log and return
+			//  1. log pre event failure can happen wth the following:
+			//   a. event validation failure
+			//   b. event already exists
+			//   c. system is not ready to accept new events (Already lockeced by another process)
+			if !status {
+				fmt.Println("Bad PreProcessing returned!item for :", addEvent.GetId())
+				break
+			}
+
+			// Add event to storage
+			aeevents := addEvent.GetOptr()
+
+			// lock the Events struct for safe concurrent access
+			aeevents.Lock()
+			aeevents.AddEvent(addEvent)
+			aeevents.Unlock() // Ensure unlock after adding event
+			postEvents(addEvent)
+
+			fmt.Printf("Added Event %d: %s\n", addEvent.GetId(), addEvent.GetMessage())
+		case <-threadPool.quit:
+			fmt.Println("Recieved Quit...")
+			return
+		}
 	}
+}
 
-	// Add event to storage
-	aeevents := addEvent.GetOptr()
-
-	// lock the Events struct for safe concurrent access
-	aeevents.Lock()
-	defer aeevents.Unlock() // Ensure unlock after adding event
-	aeevents.AddEvent(addEvent)
-
-	postEvents(addEvent)
+// 1. submitDeleteEventstoWorkerPool submits DeleteEvents to the worker pool
+func submitDeleteEventstoWorkerPool() {
+	for i := 0; i < getPoolSize(); i++ {
+		// Submit a task closure that invokes DeleteEvent with the channel
+		threadPool.deleteThreads.Submit(func() { DeleteEvent(threadPool.deleteChannel) })
+		fmt.Printf("Submitted Thread DeleteEvent to worker pool %d\n", i)
+	}
 
 }
 

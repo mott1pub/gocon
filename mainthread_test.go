@@ -64,7 +64,9 @@ func TestThreadAddMultiEvent(t *testing.T) {
 	mychannel <- anevent
 
 	// Used to all ow time for the event to be processed
-	time.Sleep(60 * time.Second)
+	time.Sleep(10 * time.Second)
+
+	// close(mychannel)
 
 	// verify new event as	added..
 	if aeevents.GetEventsCnt() != 2 {
